@@ -1,0 +1,98 @@
+{#- Wird automatisch vor jede Ansicht gesetzt. TRMNL ist nur in 12/16/21 px und Vielfachen scharf, sonst Inter. -#}
+{%- macro svg_open() -%}
+<svg xmlns="http://www.w3.org/2000/svg" width="{{ width }}" height="{{ height }}" viewBox="0 0 {{ width }} {{ height }}" shape-rendering="crispEdges">
+{%- endmacro -%}
+
+{%- macro text(x, y, content, size=16, bold=false, anchor="start", fill="#000") -%}
+{%- set family = "TRMNL12" if size in [12, 24, 36] else "TRMNL16" if size in [16, 32, 48] else "TRMNL21" if size in [21, 42, 63] else "Inter" -%}
+<text x="{{ x }}" y="{{ y }}" font-family="{{ family }}" font-size="{{ size }}" font-weight="{{ 'bold' if bold else 'normal' }}" text-anchor="{{ anchor }}" fill="{{ fill }}">{{ content | e }}</text>
+{%- endmacro -%}
+
+{%- macro hline(x1, x2, y) -%}<rect x="{{ x1 }}" y="{{ y }}" width="{{ x2 - x1 }}" height="2" fill="#000"/>{%- endmacro -%}
+{%- macro vline(x, y1, y2) -%}<rect x="{{ x }}" y="{{ y1 }}" width="2" height="{{ y2 - y1 }}" fill="#000"/>{%- endmacro -%}
+
+{%- macro cloud(cx, cy, s=1) -%}
+<g fill="#000"><circle cx="{{ cx - 14*s }}" cy="{{ cy + 5*s }}" r="{{ 16*s }}"/><circle cx="{{ cx + 11*s }}" cy="{{ cy + 3*s }}" r="{{ 20*s }}"/><circle cx="{{ cx - 2*s }}" cy="{{ cy - 9*s }}" r="{{ 15*s }}"/><rect x="{{ cx - 30*s }}" y="{{ cy + 5*s }}" width="{{ 61*s }}" height="{{ 16*s }}"/></g>
+{%- endmacro -%}
+
+{%- macro weather_icon(cond, cx, cy) -%}
+{%- if cond in ["sunny", "clear-night"] -%}
+<circle cx="{{ cx }}" cy="{{ cy }}" r="22" fill="{{ '#000' if cond == 'sunny' else '#fff' }}" stroke="#000" stroke-width="3"/>
+{%- if cond == "sunny" -%}{%- for a in range(0, 360, 45) -%}<line x1="{{ cx + 28 * cos(a * pi / 180) }}" y1="{{ cy + 28 * sin(a * pi / 180) }}" x2="{{ cx + 36 * cos(a * pi / 180) }}" y2="{{ cy + 36 * sin(a * pi / 180) }}" stroke="#000" stroke-width="3"/>{%- endfor -%}{%- endif -%}
+{%- elif cond == "partlycloudy" -%}
+<circle cx="{{ cx + 16 }}" cy="{{ cy - 16 }}" r="16" fill="#fff" stroke="#000" stroke-width="3"/>{{ cloud(cx - 4, cy + 8, 0.85) }}
+{%- elif cond in ["rainy", "pouring", "lightning-rainy", "snowy", "snowy-rainy", "hail"] -%}
+{{ cloud(cx, cy - 12, 0.85) }}
+{%- for i in range(4) -%}
+{%- if cond in ["snowy", "hail"] -%}<circle cx="{{ cx - 21 + i * 14 }}" cy="{{ cy + 26 + (i % 2) * 6 }}" r="4" fill="#000"/>
+{%- else -%}<line x1="{{ cx - 16 + i * 14 }}" y1="{{ cy + 16 }}" x2="{{ cx - 22 + i * 14 }}" y2="{{ cy + 34 }}" stroke="#000" stroke-width="3"/>{%- endif -%}
+{%- endfor -%}
+{%- elif cond == "lightning" -%}
+{{ cloud(cx, cy - 12, 0.85) }}<path d="M{{ cx + 4 }} {{ cy + 10 }} L{{ cx - 10 }} {{ cy + 26 }} L{{ cx + 2 }} {{ cy + 26 }} L{{ cx - 8 }} {{ cy + 40 }}" fill="none" stroke="#000" stroke-width="3"/>
+{%- elif cond == "fog" -%}
+{%- for i in range(5) -%}<rect x="{{ cx - 30 + (i % 2) * 8 }}" y="{{ cy - 20 + i * 10 }}" width="{{ 60 - (i % 2) * 16 }}" height="3" fill="#000"/>{%- endfor -%}
+{%- elif cond in ["windy", "windy-variant"] -%}
+{%- for i in range(3) -%}<rect x="{{ cx - 30 }}" y="{{ cy - 14 + i * 13 }}" width="{{ 60 - (i % 2) * 12 }}" height="3" fill="#000"/>{%- endfor -%}
+{%- else -%}
+{{ cloud(cx, cy) }}
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro weather_label(cond) -%}
+{{ {"sunny": "Sonnig", "clear-night": "Klar", "partlycloudy": "Teilbewölkt", "cloudy": "Bewölkt", "rainy": "Regen", "pouring": "Starkregen", "snowy": "Schnee", "snowy-rainy": "Schneeregen", "hail": "Hagel", "fog": "Nebel", "windy": "Windig", "windy-variant": "Windig", "lightning": "Gewitter", "lightning-rainy": "Unwetter"}.get(cond, "Unbekannt") }}
+{%- endmacro -%}
+
+{%- macro date_line() -%}
+{{ ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"][now().weekday()] }}, {{ now().day }}. {{ ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"][now().month - 1] }} {{ now().year }}
+{%- endmacro -%}
+
+{%- macro clock(ts) -%}{{ as_timestamp(ts) | timestamp_custom("%H:%M") if ts else "--:--" }}{%- endmacro -%}
+
+{%- macro number(entity, unit="", digits=1) -%}
+{%- set value = states(entity) | float(none) -%}
+{{ "--" if value is none else (("%." ~ digits ~ "f") | format(value)) | replace(".", ",") ~ unit }}
+{%- endmacro -%}
+
+{#- Punkte wie in der alten ESPHome-Ansicht: DWD-Stufe 0 bis 3, Zwischenstufen aufgerundet. -#}
+{%- macro pollen_row(x, y, name, entity) -%}
+{%- set value = states(entity) | float(none) -%}
+{%- set level = 0 if value is none else min(3, (value + 0.5) | int) -%}
+{{ text(x, y + 16, name, 21) }}
+{%- for i in range(3) -%}<circle cx="{{ x + 135 + i * 26 }}" cy="{{ y + 9 }}" r="8" fill="{{ '#000' if i < level else '#fff' }}" stroke="#000" stroke-width="2"/>{%- endfor -%}
+{{ text(x + 215, y + 16, "--" if value is none else ["kein", "gering", "mittel", "stark"][level], 21) }}
+{%- endmacro -%}
+
+{#- Status, Name, Balken mit Zielbereich aus der Plant-Integration, Marker für den Istwert. -#}
+{%- macro plant_row(x, y, name, plant, moisture, low, high) -%}
+{%- set ok = is_state(plant, "ok") -%}
+{%- set value = states(moisture) | float(none) -%}
+{%- set lo = states(low) | float(none) -%}
+{%- set hi = states(high) | float(none) -%}
+{%- set bx = x + 165 -%}{%- set bw = 160 -%}
+{%- if ok -%}<circle cx="{{ x + 8 }}" cy="{{ y + 8 }}" r="7" fill="#000"/>
+{%- else -%}<rect x="{{ x }}" y="{{ y }}" width="16" height="16" fill="#000"/>{{ text(x + 8, y + 14, "!", 16, true, "middle", "#fff") }}{%- endif -%}
+{{ text(x + 24, y + 14, name, 16) }}
+{%- if lo is not none and hi is not none -%}<rect x="{{ bx + (lo / 100 * bw) | int }}" y="{{ y + 1 }}" width="{{ ((hi - lo) / 100 * bw) | int }}" height="14" fill="#000"/>{%- endif -%}
+<rect x="{{ bx }}" y="{{ y }}" width="{{ bw }}" height="16" fill="none" stroke="#000" stroke-width="2"/>
+{%- if value is not none -%}
+{%- set mx = bx + (min(100, max(0, value)) / 100 * bw) | int -%}
+<path d="M{{ mx }} {{ y - 2 }} L{{ mx - 6 }} {{ y - 10 }} L{{ mx + 6 }} {{ y - 10 }} Z" fill="#000"/>
+{{ text(bx + bw + 8, y + 14, "%.0f%%" | format(value), 16) }}
+{%- else -%}{{ text(bx + bw + 8, y + 14, "--", 16) }}{%- endif -%}
+{%- endmacro -%}
+
+{#- Eine Pflanze der Plant-Integration: plant_row(x, y, "Name", "plant.xyz") nimmt die Entitäten plant.xyz, sensor.xyz_soil_moisture, number.xyz_min/max_soil_moisture. -#}
+{%- macro plant(x, y, name, entity) -%}
+{%- set base = entity.split(".")[1] -%}
+{{ plant_row(x, y, name, entity, "sensor." ~ base ~ "_soil_moisture", "number." ~ base ~ "_min_soil_moisture", "number." ~ base ~ "_max_soil_moisture") }}
+{%- endmacro -%}
+
+{%- macro weather_block(entity, x, y) -%}
+{%- set cond = states(entity) -%}
+{%- set temp = state_attr(entity, "temperature") -%}
+{{ weather_icon(cond, x + 45, y + 40) }}
+{{ text(x + 100, y + 24, weather_label(cond), 21) }}
+{{ text(x + 100, y + 72, ("--" if temp is none else ("%.1f" | format(temp)) | replace(".", ",")) ~ " °C", 42, true) }}
+{%- endmacro -%}
+
+{%- macro footer(x, y) -%}{{ text(x, y, "Stand: " ~ rendered_at.strftime("%H:%M") ~ " Uhr", 16) }}{%- endmacro -%}

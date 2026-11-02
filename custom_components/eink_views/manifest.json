@@ -1,0 +1,13 @@
+{
+  "domain": "eink_views",
+  "name": "E-Ink Views",
+  "codeowners": ["@finnwessel"],
+  "config_flow": true,
+  "dependencies": ["http"],
+  "documentation": "https://github.com/finnwessel/ha-eink-views",
+  "integration_type": "service",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/finnwessel/ha-eink-views/issues",
+  "requirements": ["Pillow>=10.0", "resvg-py>=0.3.2"],
+  "version": "0.1.0"
+}

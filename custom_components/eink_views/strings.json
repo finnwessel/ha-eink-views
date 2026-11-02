@@ -1,0 +1,33 @@
+{
+  "config": {
+    "abort": { "already_configured": "This views directory is already in use." },
+    "step": {
+      "user": {
+        "title": "E-Ink Views",
+        "description": "One entry per display. Example views are copied into the directory on first start.",
+        "data": {
+          "name": "Name",
+          "views_dir": "Views directory inside the config folder",
+          "width": "Width in pixels",
+          "height": "Height in pixels"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "E-Ink Views",
+        "description": "Image path for the display: `{image_path}`. Add `&view=name` to preview a view regardless of its conditions.",
+        "data": {
+          "width": "Width in pixels",
+          "height": "Height in pixels",
+          "rotate_key": "Create a new access key (the display needs the new URL)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": { "active_view": { "name": "Active view" } }
+  }
+}

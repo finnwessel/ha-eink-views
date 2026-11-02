@@ -1,0 +1,24 @@
+{#- Beispiel: Entitäts-IDs oben anpassen. -#}
+{%- set weather = "weather.home" -%}
+{%- set room_temp = "sensor.living_room_temperature" -%}
+{%- set room_hum = "sensor.living_room_humidity" -%}
+{{ svg_open() }}
+{{ text(10, 28, date_line(), 21, true) }}
+{{ weather_block(weather, 10, 45) }}
+{{ text(10, 160, "Auf " ~ clock(state_attr("sun.sun", "next_rising")) ~ " / Unter " ~ clock(state_attr("sun.sun", "next_setting")), 16) }}
+{{ hline(10, 380, 175) }}
+{{ text(10, 205, "Zimmer", 21, true) }}
+{{ text(10, 235, number(room_temp, " °C") ~ " / " ~ number(room_hum, " %", 0), 21) }}
+{{ hline(10, 380, 255) }}
+{{ text(10, 285, "Pollen", 21, true) }}
+{{ pollen_row(10, 300, "Gräser", "sensor.pollenflug_graeser_region") }}
+{{ pollen_row(10, 335, "Beifuß", "sensor.pollenflug_beifuss_region") }}
+{{ vline(392, 5, 475) }}
+{{ text(405, 28, "Pflanzen", 21, true) }}
+{{ hline(405, 790, 40) }}
+{{ plant(405, 70, "Monstera", "plant.monstera") }}
+{{ plant(405, 114, "Ficus", "plant.ficus") }}
+{{ plant(405, 158, "Kaktus", "plant.cactus") }}
+{{ plant(405, 202, "Basilikum", "plant.basil") }}
+{{ footer(405, 465) }}
+</svg>

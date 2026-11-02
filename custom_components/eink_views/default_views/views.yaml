@@ -1,0 +1,17 @@
+# Die erste Ansicht, deren Bedingungen zutreffen, wird ausgespielt.
+# "when" nimmt normale Home-Assistant-Bedingungen (zeit, state, numeric_state, sun, template ...).
+# Die letzte Ansicht hat keine Bedingung und greift immer.
+# Dateiname der Vorlage: <name>.svg.j2, oder eigener Name über "template:".
+views:
+  - name: abend
+    when:
+      - condition: time
+        after: "20:00:00"
+        before: "06:00:00"
+
+  - name: pollen
+    when:
+      - condition: template
+        value_template: "{{ now().month in [3, 4, 5, 6, 7, 8] }}"
+
+  - name: standard

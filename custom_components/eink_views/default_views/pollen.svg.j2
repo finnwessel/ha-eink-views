@@ -1,0 +1,25 @@
+{#- Beispiel: Entitäts-IDs oben anpassen. -#}
+{%- set weather = "weather.home" -%}
+{%- set room_temp = "sensor.living_room_temperature" -%}
+{%- set room_hum = "sensor.living_room_humidity" -%}
+{%- set pollen_prefix = "sensor.pollenflug_" -%}
+{%- set pollen_suffix = "_region" -%}
+{{ svg_open() }}
+{{ text(10, 28, date_line(), 21, true) }}
+{{ weather_block(weather, 10, 45) }}
+{{ text(10, 160, "Zimmer " ~ number(room_temp, " °C") ~ " / " ~ number(room_hum, " %", 0), 16) }}
+{{ hline(10, 380, 175) }}
+{{ text(10, 205, "Pflanzen", 21, true) }}
+{{ plant(10, 225, "Monstera", "plant.monstera") }}
+{{ plant(10, 265, "Ficus", "plant.ficus") }}
+{{ plant(10, 305, "Kaktus", "plant.cactus") }}
+{{ plant(10, 345, "Basilikum", "plant.basil") }}
+{{ vline(392, 5, 475) }}
+{{ text(405, 28, "Pollenflug", 21, true) }}
+{{ hline(405, 790, 40) }}
+{%- set allergens = [["Gräser", "graeser"], ["Roggen", "roggen"], ["Birke", "birke"], ["Erle", "erle"], ["Esche", "esche"], ["Hasel", "hasel"], ["Beifuß", "beifuss"], ["Ambrosia", "ambrosia"]] -%}
+{%- for name, key in allergens -%}
+{{ pollen_row(405, 60 + loop.index0 * 46, name, pollen_prefix ~ key ~ pollen_suffix) }}
+{%- endfor -%}
+{{ footer(405, 465) }}
+</svg>

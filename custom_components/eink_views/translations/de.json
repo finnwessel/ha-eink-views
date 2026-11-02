@@ -1,0 +1,33 @@
+{
+  "config": {
+    "abort": { "already_configured": "Dieser Ansichten-Ordner wird schon verwendet." },
+    "step": {
+      "user": {
+        "title": "E-Ink Views",
+        "description": "Ein Eintrag pro Display. Beim ersten Start werden Beispielansichten in den Ordner kopiert.",
+        "data": {
+          "name": "Name",
+          "views_dir": "Ansichten-Ordner im Config-Verzeichnis",
+          "width": "Breite in Pixeln",
+          "height": "Höhe in Pixeln"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "E-Ink Views",
+        "description": "Bildpfad für das Display: `{image_path}`. Mit `&view=name` lässt sich jede Ansicht unabhängig von ihren Bedingungen ansehen.",
+        "data": {
+          "width": "Breite in Pixeln",
+          "height": "Höhe in Pixeln",
+          "rotate_key": "Neuen Zugriffsschlüssel erzeugen (das Display braucht dann die neue URL)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": { "active_view": { "name": "Aktive Ansicht" } }
+  }
+}

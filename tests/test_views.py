@@ -8,6 +8,9 @@ from pathlib import Path
 import pytest
 from freezegun import freeze_time
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.template import Template
 from homeassistant.setup import async_setup_component
 from PIL import Image
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -167,6 +170,34 @@ async def test_write_preview(hass, entry, hass_client_no_auth, view):
     client = await hass_client_no_auth()
     response = await client.get(_url(entry, view=view))
     Path(target, f"{view}.png").write_bytes(await response.read())
+
+
+async def test_plant_entities_come_from_its_device(hass, entry, hass_client_no_auth, tmp_path):
+    """Moisture sensors named unlike the plant entity are found through the device."""
+    devices = dr.async_get(hass)
+    entities = er.async_get(hass)
+    device = devices.async_get_or_create(
+        config_entry_id=entry.entry_id, identifiers={("test", "plant1")}
+    )
+    for domain, object_id, value in [
+        ("plant", "p1", "ok"),
+        ("sensor", "plant_p1_soil_moisture", "42"),
+        ("number", "plant_p1_min_soil_moisture", "10"),
+        ("number", "plant_p1_max_soil_moisture", "60"),
+    ]:
+        entities.async_get_or_create(
+            domain, "test", object_id, suggested_object_id=object_id, device_id=device.id
+        )
+        hass.states.async_set(f"{domain}.{object_id}", value)
+    (tmp_path / "eink_views" / "probe.svg.j2").write_text(
+        '{{ svg_open() }}{{ plant(10, 10, "P", "plant.p1") }}</svg>'
+    )
+    (tmp_path / "eink_views" / "views.yaml").write_text("views:\n  - name: probe\n")
+    engine = entry.runtime_data
+    view = (await engine.async_views())[0]
+    source = await hass.async_add_executor_job(engine._read_template, view)
+    svg = Template(source, hass).async_render({"width": 800, "height": 480}, parse_result=False)
+    assert ">42%<" in svg
 
 
 async def test_active_view_sensor(hass, entry):

@@ -81,10 +81,16 @@
 {%- else -%}{{ text(bx + bw + 8, y + 14, "--", 16) }}{%- endif -%}
 {%- endmacro -%}
 
-{#- Eine Pflanze der Plant-Integration: plant_row(x, y, "Name", "plant.xyz") nimmt die Entitäten plant.xyz, sensor.xyz_soil_moisture, number.xyz_min/max_soil_moisture. -#}
+{#- Eine Pflanze der Plant-Integration: plant(x, y, "Name", "plant.xyz"). Feuchte und Zielbereich
+    kommen von den Entitäten am Gerät der Pflanze; ohne Gerät wird sensor.xyz_soil_moisture usw. angenommen. -#}
 {%- macro plant(x, y, name, entity) -%}
+{%- set device = device_id(entity) -%}
+{%- set own = device_entities(device) if device else [] -%}
 {%- set base = entity.split(".")[1] -%}
-{{ plant_row(x, y, name, entity, "sensor." ~ base ~ "_soil_moisture", "number." ~ base ~ "_min_soil_moisture", "number." ~ base ~ "_max_soil_moisture") }}
+{%- set moisture = own | select("search", "^sensor\\..*_soil_moisture$") | first | default("sensor." ~ base ~ "_soil_moisture") -%}
+{%- set low = own | select("search", "^number\\..*_min_soil_moisture$") | first | default("number." ~ base ~ "_min_soil_moisture") -%}
+{%- set high = own | select("search", "^number\\..*_max_soil_moisture$") | first | default("number." ~ base ~ "_max_soil_moisture") -%}
+{{ plant_row(x, y, name, entity, moisture, low, high) }}
 {%- endmacro -%}
 
 {%- macro weather_block(entity, x, y) -%}

@@ -7,7 +7,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-import voluptuous as vol
 from freezegun import freeze_time
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
@@ -335,8 +334,9 @@ async def test_config_flow_views_dir(hass, views_dir, ok):
     result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
     user_input = {"name": "Desk", "views_dir": views_dir, "width": 800, "height": 480}
     if not ok:
-        with pytest.raises(vol.Invalid):
-            await hass.config_entries.flow.async_configure(result["flow_id"], user_input)
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], user_input)
+        assert result["type"] == "form"
+        assert result["errors"] == {"views_dir": "invalid_views_dir"}
         return
     with patch("custom_components.eink_views.async_setup_entry", return_value=True):
         result = await hass.config_entries.flow.async_configure(result["flow_id"], user_input)
@@ -358,3 +358,22 @@ async def test_reconfigure_moves_entry_to_new_dir(hass, entry, hass_client_no_au
     assert entry.runtime_data.views_dir == tmp_path / "moved" / "hallway"
     client = await hass_client_no_auth()
     assert (await client.get(_url(entry))).status == 200
+
+
+async def test_forms_serialize_over_http(hass, entry, hass_client):
+    """The UI fetches flows over HTTP, which needs schemas HA can serialise."""
+    assert await async_setup_component(hass, "config", {})
+    client = await hass_client()
+    response = await client.post("/api/config/config_entries/flow", json={"handler": DOMAIN})
+    assert response.status == 200, await response.text()
+    assert (await response.json())["step_id"] == "user"
+    response = await client.post(
+        "/api/config/config_entries/flow",
+        json={"handler": DOMAIN, "entry_id": entry.entry_id, "source": "reconfigure"},
+    )
+    assert response.status == 200, await response.text()
+    assert (await response.json())["step_id"] == "reconfigure"
+    response = await client.post(
+        "/api/config/config_entries/options/flow", json={"handler": entry.entry_id}
+    )
+    assert response.status == 200, await response.text()

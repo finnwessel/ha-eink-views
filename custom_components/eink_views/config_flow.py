@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import secrets
 from typing import Any
 
@@ -24,7 +25,12 @@ from .const import (
 )
 
 _SIZE = vol.All(vol.Coerce(int), vol.Range(min=16, max=4096))
-_VIEWS_DIR = vol.All(str, lambda value: value.strip().strip("/"), vol.Match(VIEWS_DIR_PATTERN))
+
+
+def _clean_views_dir(value: str) -> str | None:
+    """Normalised directory, or None if it is not "name" or "parent/name"."""
+    value = value.strip().strip("/")
+    return value if re.fullmatch(VIEWS_DIR_PATTERN, value) else None
 
 
 def _new_key() -> str:
@@ -35,8 +41,11 @@ class EinkViewsConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        if user_input is not None:
-            views_dir = user_input[CONF_VIEWS_DIR]
+        errors: dict[str, str] = {}
+        if user_input is not None and _clean_views_dir(user_input[CONF_VIEWS_DIR]) is None:
+            errors[CONF_VIEWS_DIR] = "invalid_views_dir"
+        elif user_input is not None:
+            views_dir = _clean_views_dir(user_input[CONF_VIEWS_DIR])
             self._async_abort_entries_match({CONF_VIEWS_DIR: views_dir})
             return self.async_create_entry(
                 title=user_input[CONF_NAME],
@@ -52,11 +61,12 @@ class EinkViewsConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_NAME, default="E-Ink"): str,
-                    vol.Required(CONF_VIEWS_DIR, default=DEFAULT_VIEWS_DIR): _VIEWS_DIR,
+                    vol.Required(CONF_VIEWS_DIR, default=DEFAULT_VIEWS_DIR): str,
                     vol.Required(CONF_WIDTH, default=DEFAULT_WIDTH): _SIZE,
                     vol.Required(CONF_HEIGHT, default=DEFAULT_HEIGHT): _SIZE,
                 }
             ),
+            errors=errors,
         )
 
     async def async_step_reconfigure(
@@ -64,8 +74,11 @@ class EinkViewsConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Point an entry at another directory. Files are not moved; the URL stays the same."""
         entry = self._get_reconfigure_entry()
-        if user_input is not None:
-            views_dir = user_input[CONF_VIEWS_DIR]
+        errors: dict[str, str] = {}
+        views_dir = _clean_views_dir(user_input[CONF_VIEWS_DIR]) if user_input else None
+        if user_input is not None and views_dir is None:
+            errors[CONF_VIEWS_DIR] = "invalid_views_dir"
+        elif user_input is not None:
             if views_dir != entry.data[CONF_VIEWS_DIR]:
                 self._async_abort_entries_match({CONF_VIEWS_DIR: views_dir})
             return self.async_update_reload_and_abort(
@@ -74,8 +87,9 @@ class EinkViewsConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="reconfigure",
             data_schema=vol.Schema(
-                {vol.Required(CONF_VIEWS_DIR, default=entry.data[CONF_VIEWS_DIR]): _VIEWS_DIR}
+                {vol.Required(CONF_VIEWS_DIR, default=entry.data[CONF_VIEWS_DIR]): str}
             ),
+            errors=errors,
         )
 
     @staticmethod

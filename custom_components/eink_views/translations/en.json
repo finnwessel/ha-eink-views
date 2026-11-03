@@ -22,6 +22,9 @@
           "views_dir": "Views directory inside the config folder"
         }
       }
+    },
+    "error": {
+      "invalid_views_dir": "Use a name like `eink_views/desk`: letters, digits, `_` and `-`, at most one `/`."
     }
   },
   "options": {

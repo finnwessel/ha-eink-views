@@ -22,6 +22,9 @@
           "views_dir": "Ansichten-Ordner im Config-Verzeichnis"
         }
       }
+    },
+    "error": {
+      "invalid_views_dir": "Bitte einen Namen wie `eink_views/schreibtisch` angeben: Buchstaben, Ziffern, `_` und `-`, höchstens ein `/`."
     }
   },
   "options": {

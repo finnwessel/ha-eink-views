@@ -1,6 +1,6 @@
 # E-Ink Views
 
-Rendert SVG-Vorlagen in Home Assistant zu einem 1-Bit-PNG für E-Ink-Displays. Du legst **mehrere Ansichten** an, und Home-Assistant-Bedingungen entscheiden, welche ausgespielt wird: nach Jahreszeit, Uhrzeit oder Zustand von Entitäten. Das Display holt nur noch ein Bild über eine URL.
+Rendert SVG-Vorlagen in Home Assistant zu 1-Bit-PNGs für E-Ink-Displays, auf Wunsch mit eigener Rot-Ebene für dreifarbige Displays. Du legst **mehrere Ansichten** an, und Home-Assistant-Bedingungen entscheiden, welche ausgespielt wird: nach Jahreszeit, Uhrzeit oder Zustand von Entitäten. Das Display holt nur noch ein Bild über eine URL.
 
 ## Einrichtung
 
@@ -56,6 +56,33 @@ image:
 ```
 
 Das Bild kommt erst beim nächsten Aufwachen auf dem Display an. Der Takt des Geräts bestimmt also, wie schnell eine neue Ansicht sichtbar wird.
+
+### Mehrere Displays
+
+Jeder Eintrag der Integration ist ein Display mit eigenem Ordner, eigener `views.yaml`, eigener Größe, eigener URL und eigenem Sensor **Aktive Ansicht**. Für ein zweites Display die Integration ein weiteres Mal hinzufügen und einen anderen Ordner wählen.
+
+Damit nicht für jedes Display ein eigener Ordner im Config-Verzeichnis landet, darf der Ordner eine Ebene tiefer liegen, z. B. `eink_views/flur` und `eink_views/schreibtisch`. Eine `_macros.svg.j2` direkt in `eink_views/` gilt dann für alle Displays darunter. Die eigene `_macros.svg.j2` eines Displays wird danach geladen und kann geteilte Makros überschreiben.
+
+```
+config/eink_views/
+├── _macros.svg.j2        geteilt
+├── flur/                 views.yaml, eigene Makros, Ansichten
+└── schreibtisch/
+```
+
+Ein bestehender Eintrag zieht über **Neu konfigurieren** in einen anderen Ordner um. Die Dateien verschiebst du selbst; Eintrag, Schlüssel und Bild-URL bleiben gleich, das Display muss also nicht neu geflasht werden.
+
+### Schwarz, Weiß und Rot
+
+Rot gezeichnete Flächen und Schrift (`fill="#f00"`) werden auf Wunsch als eigene Ebene ausgegeben. Der Parameter `layer` an der Bild-URL wählt sie:
+
+| `layer` | Inhalt |
+|---|---|
+| `all` (Standard) | alles Dunkle, Rot zählt als Schwarz: für Schwarz-Weiß-Displays |
+| `black` | Schwarz ohne Rot |
+| `red` | nur Rot |
+
+Ein Dreifarb-Display lädt erst `black`, dann `red`. Die rote Ebene stammt dabei aus demselben Rendervorgang wie die schwarze, wenn sie innerhalb von 60 Sekunden abgerufen wird. Beide Ebenen sind 1-Bit-PNGs, in denen Schwarz für „einfärben“ steht. Mit ESPHome reicht ein Bildpuffer: die schwarze Ebene laden und zeichnen, dieselbe `online_image` per `online_image.set_url` auf die rote Ebene umstellen und deren schwarze Pixel mit `draw_pixel_at(x, y, rot)` darüberlegen. Erst danach das Display aktualisieren (`auto_clear_enabled: false`).
 
 ## Sicherheit
 

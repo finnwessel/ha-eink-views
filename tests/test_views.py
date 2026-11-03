@@ -4,8 +4,10 @@ import io
 import os
 import shutil
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
+import voluptuous as vol
 from freezegun import freeze_time
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
@@ -23,6 +25,7 @@ from custom_components.eink_views.const import (
     DOMAIN,
 )
 from custom_components.eink_views.engine import ViewsConfigError, parse_views
+from custom_components.eink_views.raster import svg_to_layers
 
 KEY = "test-key"
 PREVIEW_STATES = {
@@ -229,3 +232,129 @@ async def test_existing_files_survive_setup(hass, entry, tmp_path):
 def test_parse_views_rejects(raw):
     with pytest.raises(ViewsConfigError):
         parse_views(raw)
+
+
+# Black square left, red square right, on white.
+TWO_COLOURS = (
+    '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20">'
+    '<rect x="0" y="0" width="20" height="20" fill="#000"/>'
+    '<rect x="20" y="0" width="20" height="20" fill="#f00"/></svg>'
+)
+
+
+def _inked(png: bytes) -> tuple[bool, bool]:
+    """Whether the left and the right square are black in a layer."""
+    with Image.open(io.BytesIO(png)) as image:
+        return image.getpixel((10, 10)) == 0, image.getpixel((30, 10)) == 0
+
+
+def test_layers_split_black_and_red():
+    layers = svg_to_layers(TWO_COLOURS, 40, 20)
+    assert _inked(layers["all"]) == (True, True)
+    assert _inked(layers["black"]) == (True, False)
+    assert _inked(layers["red"]) == (False, True)
+
+
+async def test_layer_query(hass, entry, hass_client_no_auth):
+    client = await hass_client_no_auth()
+    for layer in ("all", "black", "red"):
+        response = await client.get(_url(entry, layer=layer))
+        assert response.status == 200
+        assert response.headers["X-Eink-Layer"] == layer
+    assert (await client.get(_url(entry, layer="blue"))).status == 400
+
+
+async def test_red_layer_comes_from_the_same_render(hass, entry, hass_client_no_auth, tmp_path):
+    views = tmp_path / "eink_views" / "views.yaml"
+    views.write_text(
+        "views:\n"
+        "  - name: warn\n    template: abend.svg.j2\n    when:\n"
+        "      - condition: state\n        entity_id: plant.monstera\n        state: problem\n"
+        "  - name: standard\n"
+    )
+    client = await hass_client_no_auth()
+    black = await client.get(_url(entry, layer="black"))
+    hass.states.async_set("plant.monstera", "ok")
+    red = await client.get(_url(entry, layer="red"))
+    assert black.headers["X-Eink-View"] == red.headers["X-Eink-View"] == "warn"
+
+
+async def _nested_entry(hass, tmp_path, views_dir: str) -> MockConfigEntry:
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_VIEWS_DIR: views_dir},
+        options={CONF_WIDTH: 40, CONF_HEIGHT: 20, CONF_ACCESS_KEY: KEY},
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    return entry
+
+
+async def test_displays_share_parent_macros(hass, entry, hass_client_no_auth, tmp_path):
+    """eink_views/<name>: shared macros from the parent, the display's own override them."""
+    shared = tmp_path / "eink_views" / "_macros.svg.j2"
+    shared.write_text(
+        '{%- macro box() -%}<rect x="0" y="0" width="20" height="20" fill="#000"/>{%- endmacro -%}'
+        '{%- macro dot() -%}<rect x="20" y="0" width="20" height="20" fill="#000"/>{%- endmacro -%}'
+    )
+    desk = tmp_path / "eink_views" / "desk"
+    desk.mkdir()
+    (desk / "views.yaml").write_text("views:\n  - name: main\n")
+    (desk / "_macros.svg.j2").write_text("{%- macro dot() -%}{%- endmacro -%}")
+    (desk / "main.svg.j2").write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20">'
+        "{{ box() }}{{ dot() }}</svg>"
+    )
+    desk_entry = await _nested_entry(hass, tmp_path, "eink_views/desk")
+    client = await hass_client_no_auth()
+    response = await client.get(_url(desk_entry))
+    assert response.status == 200, await response.text()
+    assert _inked(await response.read()) == (True, False)
+
+
+async def test_new_nested_dir_gets_examples(hass, tmp_path):
+    hass.config.config_dir = str(tmp_path)
+    assert await async_setup_component(hass, "http", {})
+    await _nested_entry(hass, tmp_path, "eink_views/desk")
+    assert (tmp_path / "eink_views" / "desk" / "views.yaml").exists()
+
+
+@pytest.mark.parametrize(
+    ("views_dir", "ok"),
+    [
+        ("eink_views/desk", True),
+        ("/eink_views/desk/", True),
+        ("flat", True),
+        ("eink_views/../secrets", False),
+        ("a/b/c", False),
+        ("..", False),
+    ],
+)
+async def test_config_flow_views_dir(hass, views_dir, ok):
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+    user_input = {"name": "Desk", "views_dir": views_dir, "width": 800, "height": 480}
+    if not ok:
+        with pytest.raises(vol.Invalid):
+            await hass.config_entries.flow.async_configure(result["flow_id"], user_input)
+        return
+    with patch("custom_components.eink_views.async_setup_entry", return_value=True):
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], user_input)
+    assert result["type"] == "create_entry"
+    assert result["data"] == {CONF_VIEWS_DIR: views_dir.strip("/")}
+
+
+async def test_reconfigure_moves_entry_to_new_dir(hass, entry, hass_client_no_auth, tmp_path):
+    """The XIAO case: same entry and URL, views now under eink_views/hallway."""
+    shutil.copytree(tmp_path / "eink_views", tmp_path / "moved" / "hallway")
+    result = await entry.start_reconfigure_flow(hass)
+    assert result["step_id"] == "reconfigure"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"views_dir": "moved/hallway"}
+    )
+    await hass.async_block_till_done()
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.data[CONF_VIEWS_DIR] == "moved/hallway"
+    assert entry.runtime_data.views_dir == tmp_path / "moved" / "hallway"
+    client = await hass_client_no_auth()
+    assert (await client.get(_url(entry))).status == 200

@@ -11,6 +11,7 @@ from homeassistant.exceptions import TemplateError
 
 from .const import CONF_ACCESS_KEY, DOMAIN
 from .engine import Rendered, ViewsConfigError
+from .raster import LAYERS
 
 
 class EinkViewsImageView(HomeAssistantView):
@@ -35,19 +36,30 @@ class EinkViewsImageView(HomeAssistantView):
             raise web.HTTPServiceUnavailable
         engine = entry.runtime_data
 
+        # all: one black-and-white image. black + red: the two planes of a black/white/red
+        # display, fetched in that order; red reuses the render of the black request.
+        layer = request.query.get("layer", "all")
+        if layer not in LAYERS:
+            raise web.HTTPBadRequest(text=f"layer must be one of: {', '.join(LAYERS)}")
+
         preview = request.query.get("view")
         if preview is not None:
             rendered = await self._async_preview(engine, preview)
         else:
-            rendered = await engine.async_render_active()
+            rendered = await engine.async_render_active(reuse_recent=layer == "red")
         if rendered is None:
             raise web.HTTPServiceUnavailable
 
-        etag = f'"{rendered.etag}"'
-        headers = {"ETag": etag, "X-Eink-View": rendered.view, "Cache-Control": "no-store"}
+        etag = f'"{rendered.etag(layer)}"'
+        headers = {
+            "ETag": etag,
+            "X-Eink-View": rendered.view,
+            "X-Eink-Layer": layer,
+            "Cache-Control": "no-store",
+        }
         if request.headers.get("If-None-Match") == etag:
             return web.Response(status=304, headers=headers)
-        return web.Response(body=rendered.png, content_type="image/png", headers=headers)
+        return web.Response(body=rendered.png(layer), content_type="image/png", headers=headers)
 
     async def _async_preview(self, engine, name: str) -> Rendered:
         """Render a named view regardless of its conditions, for designing it."""

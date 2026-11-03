@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import shutil
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -19,7 +20,7 @@ from homeassistant.helpers.template import Template
 from homeassistant.util import dt as dt_util
 
 from .const import MACROS_FILE, VIEWS_FILE
-from .raster import svg_to_png
+from .raster import svg_to_layers
 
 _LOGGER = logging.getLogger(__name__)
 _DEFAULTS_DIR = Path(__file__).parent / "default_views"
@@ -36,11 +37,23 @@ class View:
     when: list[dict[str, Any]] = field(default_factory=list)
 
 
+# A black/white/red display fetches its black and red layer one after the other.
+# Within this window the red request reuses the image the black one got, so both
+# layers always come from the same render.
+LAYER_REUSE_SECONDS = 60
+
+
 @dataclass(slots=True)
 class Rendered:
     view: str
-    png: bytes
-    etag: str
+    layers: dict[str, bytes]
+    created: float = field(default_factory=time.monotonic)
+
+    def png(self, layer: str = "all") -> bytes:
+        return self.layers[layer]
+
+    def etag(self, layer: str = "all") -> str:
+        return hashlib.sha256(self.layers[layer]).hexdigest()
 
 
 def parse_views(raw: Any) -> list[View]:
@@ -67,9 +80,17 @@ def parse_views(raw: Any) -> list[View]:
 class ViewEngine:
     """Reads the files on every use, so an edited view shows up without a reload."""
 
-    def __init__(self, hass: HomeAssistant, views_dir: Path, width: int, height: int) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        views_dir: Path,
+        width: int,
+        height: int,
+        shared_macros: Path | None = None,
+    ) -> None:
         self.hass = hass
         self.views_dir = views_dir
+        self.shared_macros = shared_macros
         self.width = width
         self.height = height
         self.last_good: Rendered | None = None
@@ -88,9 +109,13 @@ class ViewEngine:
         return parse_views(raw)
 
     def _read_template(self, view: View) -> str:
-        macros = self.views_dir / MACROS_FILE
-        prefix = macros.read_text(encoding="utf-8") if macros.exists() else ""
-        return prefix + (self.views_dir / view.template).read_text(encoding="utf-8")
+        """Shared macros first, then the display's own (which may override), then the view."""
+        parts = [
+            path.read_text(encoding="utf-8")
+            for path in (self.shared_macros, self.views_dir / MACROS_FILE)
+            if path is not None and path.exists()
+        ]
+        return "".join(parts) + (self.views_dir / view.template).read_text(encoding="utf-8")
 
     async def async_views(self) -> list[View]:
         return await self.hass.async_add_executor_job(self._read_views)
@@ -128,13 +153,22 @@ class ViewEngine:
             },
             parse_result=False,
         )
-        png = await self.hass.async_add_executor_job(
-            svg_to_png, svg, self.width, self.height
+        layers = await self.hass.async_add_executor_job(
+            svg_to_layers, svg, self.width, self.height
         )
-        return Rendered(view.name, png, hashlib.sha256(png).hexdigest())
+        return Rendered(view.name, layers)
 
-    async def async_render_active(self) -> Rendered | None:
-        """Render the first working match, or fall back to the last good image."""
+    async def async_render_active(self, reuse_recent: bool = False) -> Rendered | None:
+        """Render the first working match, or fall back to the last good image.
+
+        reuse_recent hands out the last image if it is younger than LAYER_REUSE_SECONDS.
+        """
+        if (
+            reuse_recent
+            and self.last_good is not None
+            and time.monotonic() - self.last_good.created < LAYER_REUSE_SECONDS
+        ):
+            return self.last_good
         try:
             matching = await self.async_matching()
         except ViewsConfigError as err:

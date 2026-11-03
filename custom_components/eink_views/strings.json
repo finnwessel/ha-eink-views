@@ -1,15 +1,25 @@
 {
   "config": {
-    "abort": { "already_configured": "This views directory is already in use." },
+    "abort": {
+      "already_configured": "This views directory is already in use.",
+      "reconfigure_successful": "The directory was changed. Files are not moved; the image URL stays the same."
+    },
     "step": {
       "user": {
         "title": "E-Ink Views",
-        "description": "One entry per display. Example views are copied into the directory on first start.",
+        "description": "One entry per display. Example views are copied into the directory on first start. With `eink_views/name` all displays live in one directory and share its `_macros.svg.j2`.",
         "data": {
           "name": "Name",
           "views_dir": "Views directory inside the config folder",
           "width": "Width in pixels",
           "height": "Height in pixels"
+        }
+      },
+      "reconfigure": {
+        "title": "E-Ink Views",
+        "description": "Change the views directory, e.g. `eink_views/hallway`. Move the files yourself; the image URL stays the same.",
+        "data": {
+          "views_dir": "Views directory inside the config folder"
         }
       }
     }
@@ -28,6 +38,10 @@
     }
   },
   "entity": {
-    "sensor": { "active_view": { "name": "Active view" } }
+    "sensor": {
+      "active_view": {
+        "name": "Active view"
+      }
+    }
   }
 }

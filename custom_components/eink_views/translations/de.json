@@ -1,15 +1,25 @@
 {
   "config": {
-    "abort": { "already_configured": "Dieser Ansichten-Ordner wird schon verwendet." },
+    "abort": {
+      "already_configured": "Dieser Ansichten-Ordner wird schon verwendet.",
+      "reconfigure_successful": "Der Ordner wurde geändert. Dateien werden nicht verschoben, die Bild-URL bleibt gleich."
+    },
     "step": {
       "user": {
         "title": "E-Ink Views",
-        "description": "Ein Eintrag pro Display. Beim ersten Start werden Beispielansichten in den Ordner kopiert.",
+        "description": "Ein Eintrag pro Display. Beim ersten Start werden Beispielansichten in den Ordner kopiert. Mit `eink_views/name` liegen alle Displays in einem Ordner und teilen sich dessen `_macros.svg.j2`.",
         "data": {
           "name": "Name",
           "views_dir": "Ansichten-Ordner im Config-Verzeichnis",
           "width": "Breite in Pixeln",
           "height": "Höhe in Pixeln"
+        }
+      },
+      "reconfigure": {
+        "title": "E-Ink Views",
+        "description": "Ordner der Ansichten ändern, z. B. `eink_views/flur`. Die Dateien musst du selbst verschieben; die Bild-URL bleibt gleich.",
+        "data": {
+          "views_dir": "Ansichten-Ordner im Config-Verzeichnis"
         }
       }
     }
@@ -28,6 +38,10 @@
     }
   },
   "entity": {
-    "sensor": { "active_view": { "name": "Aktive Ansicht" } }
+    "sensor": {
+      "active_view": {
+        "name": "Aktive Ansicht"
+      }
+    }
   }
 }

@@ -14,7 +14,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
-from .const import CONF_HEIGHT, CONF_VIEWS_DIR, CONF_WIDTH, DOMAIN
+from .const import CONF_HEIGHT, CONF_VIEWS_DIR, CONF_WIDTH, DOMAIN, MACROS_FILE
 from .engine import ViewEngine
 from .http import EinkViewsImageView
 
@@ -31,11 +31,15 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: EinkViewsConfigEntry) -> bool:
+    views_dir = entry.data[CONF_VIEWS_DIR]
     engine = ViewEngine(
         hass,
-        Path(hass.config.path(entry.data[CONF_VIEWS_DIR])),
+        Path(hass.config.path(views_dir)),
         entry.options[CONF_WIDTH],
         entry.options[CONF_HEIGHT],
+        shared_macros=Path(hass.config.path(views_dir)).parent / MACROS_FILE
+        if "/" in views_dir
+        else None,
     )
     await hass.async_add_executor_job(engine.install_defaults)
     entry.runtime_data = engine

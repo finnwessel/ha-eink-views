@@ -24,7 +24,7 @@ from custom_components.eink_views.const import (
     DOMAIN,
 )
 from custom_components.eink_views.engine import ViewsConfigError, parse_views
-from custom_components.eink_views.raster import svg_to_layers
+from custom_components.eink_views.raster import png_to_bmp, svg_to_layers
 
 KEY = "test-key"
 PREVIEW_STATES = {
@@ -377,3 +377,31 @@ async def test_forms_serialize_over_http(hass, entry, hass_client):
         "/api/config/config_entries/options/flow", json={"handler": entry.entry_id}
     )
     assert response.status == 200, await response.text()
+
+
+async def test_bmp_format(hass, entry, hass_client_no_auth):
+    """BMP for devices without memory for a PNG decoder; same pixels as the PNG."""
+    client = await hass_client_no_auth()
+    for layer in ("black", "red"):
+        png = await client.get(_url(entry, layer=layer))
+        bmp = await client.get(_url(entry, layer=layer, format="bmp"))
+        assert bmp.status == 200
+        assert bmp.headers["Content-Type"] == "image/bmp"
+        assert bmp.headers["ETag"] != png.headers["ETag"]
+        raw = await bmp.read()
+        with Image.open(io.BytesIO(raw)) as b, Image.open(io.BytesIO(await png.read())) as p:
+            assert b.size == (800, 480)
+            assert b.convert("L").tobytes() == p.convert("L").tobytes()
+        # ESPHome ignores the colour table: a set bit must mean white, 1 bit per pixel.
+        assert raw[28] == 1 and raw[30:34] == b"\0\0\0\0"
+    assert (await client.get(_url(entry, format="gif"))).status == 400
+
+
+def test_bmp_bits_mean_white():
+    layers = svg_to_layers(TWO_COLOURS, 40, 20)
+    raw = png_to_bmp(layers["black"])  # left half black, right half (red) white
+    offset = int.from_bytes(raw[10:14], "little")
+    row_bytes = ((40 + 31) // 32) * 4
+    top_row = raw[offset + 19 * row_bytes : offset + 20 * row_bytes]  # rows are stored bottom-up
+    assert top_row[0] == 0x00  # x 0-7 inked (black)
+    assert top_row[4] == 0xFF  # x 32-39 white

@@ -11,7 +11,7 @@ from homeassistant.exceptions import TemplateError
 
 from .const import CONF_ACCESS_KEY, DOMAIN
 from .engine import Rendered, ViewsConfigError
-from .raster import LAYERS
+from .raster import FORMATS, LAYERS
 
 
 class EinkViewsImageView(HomeAssistantView):
@@ -41,6 +41,10 @@ class EinkViewsImageView(HomeAssistantView):
         layer = request.query.get("layer", "all")
         if layer not in LAYERS:
             raise web.HTTPBadRequest(text=f"layer must be one of: {', '.join(LAYERS)}")
+        # png (default, small) or bmp (uncompressed, for devices short of memory)
+        fmt = request.query.get("format", "png")
+        if fmt not in FORMATS:
+            raise web.HTTPBadRequest(text=f"format must be one of: {', '.join(FORMATS)}")
 
         preview = request.query.get("view")
         if preview is not None:
@@ -50,7 +54,7 @@ class EinkViewsImageView(HomeAssistantView):
         if rendered is None:
             raise web.HTTPServiceUnavailable
 
-        etag = f'"{rendered.etag(layer)}"'
+        etag = f'"{rendered.etag(layer, fmt)}"'
         headers = {
             "ETag": etag,
             "X-Eink-View": rendered.view,
@@ -59,6 +63,9 @@ class EinkViewsImageView(HomeAssistantView):
         }
         if request.headers.get("If-None-Match") == etag:
             return web.Response(status=304, headers=headers)
+        if fmt == "bmp":
+            body = await self.hass.async_add_executor_job(rendered.bmp, layer)
+            return web.Response(body=body, content_type="image/bmp", headers=headers)
         return web.Response(body=rendered.png(layer), content_type="image/png", headers=headers)
 
     async def _async_preview(self, engine, name: str) -> Rendered:

@@ -20,7 +20,7 @@ from homeassistant.helpers.template import Template
 from homeassistant.util import dt as dt_util
 
 from .const import MACROS_FILE, VIEWS_FILE
-from .raster import svg_to_layers
+from .raster import png_to_bmp, svg_to_layers
 
 _LOGGER = logging.getLogger(__name__)
 _DEFAULTS_DIR = Path(__file__).parent / "default_views"
@@ -48,12 +48,19 @@ class Rendered:
     view: str
     layers: dict[str, bytes]
     created: float = field(default_factory=time.monotonic)
+    _bmp: dict[str, bytes] = field(default_factory=dict)
 
     def png(self, layer: str = "all") -> bytes:
         return self.layers[layer]
 
-    def etag(self, layer: str = "all") -> str:
-        return hashlib.sha256(self.layers[layer]).hexdigest()
+    def bmp(self, layer: str = "all") -> bytes:
+        """Converted on first use and kept, as the red request usually follows the black one."""
+        if layer not in self._bmp:
+            self._bmp[layer] = png_to_bmp(self.layers[layer])
+        return self._bmp[layer]
+
+    def etag(self, layer: str = "all", fmt: str = "png") -> str:
+        return hashlib.sha256(self.layers[layer] + fmt.encode()).hexdigest()
 
 
 def parse_views(raw: Any) -> list[View]:

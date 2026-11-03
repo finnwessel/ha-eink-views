@@ -16,6 +16,7 @@ THRESHOLD = 128
 #   black  dark but not red (black plane of a black/white/red display)
 #   red    clearly red only (red plane of a black/white/red display)
 LAYERS = ("all", "black", "red")
+FORMATS = ("png", "bmp")
 
 
 def _mask(channel: Image.Image, below: bool) -> Image.Image:
@@ -56,6 +57,18 @@ def svg_to_layers(svg: str, width: int, height: int) -> dict[str, bytes]:
         "black": _encode(ImageChops.subtract(dark, red)),
         "red": _encode(red),
     }
+
+
+def png_to_bmp(png: bytes) -> bytes:
+    """Same 1-bit image as an uncompressed BMP.
+
+    Devices without PSRAM may lack the memory for a PNG decoder next to the image
+    buffer (zlib needs about 40 KB); a BMP is decoded row by row without one.
+    """
+    with Image.open(io.BytesIO(png)) as image:
+        out = io.BytesIO()
+        image.convert("1").save(out, format="BMP")
+    return out.getvalue()
 
 
 def svg_to_png(svg: str, width: int, height: int) -> bytes:

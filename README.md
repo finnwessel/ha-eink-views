@@ -84,6 +84,10 @@ Rot gezeichnete Flächen und Schrift (`fill="#f00"`) werden auf Wunsch als eigen
 
 Ein Dreifarb-Display lädt erst `black`, dann `red`. Die rote Ebene stammt dabei aus demselben Rendervorgang wie die schwarze, wenn sie innerhalb von 60 Sekunden abgerufen wird. Beide Ebenen sind 1-Bit-PNGs, in denen Schwarz für „einfärben“ steht. Mit ESPHome reicht ein Bildpuffer: die schwarze Ebene laden und zeichnen, dieselbe `online_image` per `online_image.set_url` auf die rote Ebene umstellen und deren schwarze Pixel mit `draw_pixel_at(x, y, rot)` darüberlegen. Erst danach das Display aktualisieren (`auto_clear_enabled: false`).
 
+### Wenig Speicher: BMP statt PNG
+
+Mit `&format=bmp` kommt dasselbe 1-Bit-Bild als unkomprimiertes BMP (800×480 etwa 47 KB statt etwa 5 KB). Das lohnt sich auf Geräten ohne PSRAM: Der PNG-Decoder braucht für zlib etwa 40 KB zusätzlich zum Bildpuffer. Ein ESP32 mit dem 96-KB-Puffer eines Dreifarb-Displays hat dafür nicht genug zusammenhängenden Speicher. In ESPHome dann `format: BMP` setzen.
+
 ## Sicherheit
 
 Der Endpunkt verlangt keine Home-Assistant-Anmeldung, sondern einen eigenen Schlüssel in der URL. Er öffnet nur dieses Bild und gibt keinen Zugriff auf Home Assistant. Über unverschlüsseltes HTTP ist er aber mitlesbar, und die URL steht im Klartext in der Firmware des Geräts. Personenbezogene Daten gehören daher nur bewusst in eine Ansicht. Unter **Konfigurieren** lässt sich ein neuer Schlüssel erzeugen.
